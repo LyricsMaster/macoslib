@@ -1,6 +1,27 @@
 #tag Class
 Protected Class Process
 	#tag Method, Flags = &h0
+		Function BundleIdentifier() As String
+		  #if TargetMacOS
+		    Soft Declare Function ProcessInformationCopyDictionary Lib CarbonLib (ByRef PSN As ProcessSerialNumber, infoToReturn As Integer) As Integer
+		    
+		    Dim cfDicRef As Integer = ProcessInformationCopyDictionary(psn, kProcessDictionaryIncludeAllInformationMask)
+		    Dim cfDic As CFDictionary = CFDictionary(CFType.FromHandle(cfDicRef))
+		    Dim key As New CFString("CFBundleIdentifier") // kCFBundleIdentifierKey
+		    Dim bundleId As String = ""
+		    
+		    If cfDic.HasKey(key) then
+		      bundleId = CFString(cfDic.Value(key))
+		    End if
+		    CoreFoundation.Release(Ptr(cfDicRef))
+		    
+		    Return bundleId
+		  #endif
+		  
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h0
 		Function BundleLocation() As FolderItem
 		  //Retrieves the file system location of the application bundle (or executable file) associated with a process.
 		  
@@ -153,6 +174,17 @@ Protected Class Process
 		  loop
 		  
 		  return theList
+		End Function
+	#tag EndMethod
+
+	#tag Method, Flags = &h0
+		Function SerialNumber() As ProcessSerialNumber
+		  Dim psn2 As ProcessSerialNumber
+		  
+		  psn2.highLongOfPSN = psn.highLongOfPSN
+		  psn2.lowLongOfPSN = psn.lowLongOfPSN
+		  
+		  Return psn2
 		End Function
 	#tag EndMethod
 

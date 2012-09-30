@@ -1,5 +1,22 @@
 #tag Module
 Protected Module AppleEvents
+	#tag Method, Flags = &h21
+		Private Function LookupPSNFromBundleID(bundleId As String) As ProcessSerialNumber
+		  Dim list() As ProcessManager.Process
+		  list = ProcessManager.Process.ProcessList()
+		  For Each p As ProcessManager.Process In list
+		    If p.BundleIdentifier() = bundleId Then
+		      Return p.SerialNumber()
+		    End If
+		  Next
+		  
+		  Dim psn As ProcessSerialNumber
+		  psn.highLongOfPSN = 0
+		  psn.lowLongOfPSN = 0
+		  Return psn
+		End Function
+	#tag EndMethod
+
 	#tag Method, Flags = &h0
 		Function PrintDesc(extends ae as AppleEvent, getReply as boolean = false) As string
 		  Soft declare function AEPrintDescToHandle lib "Carbon" (theEvent as integer, hdl as Ptr) as integer
@@ -87,6 +104,67 @@ Protected Module AppleEvents
 		  end if
 		  err = AEPutParamPtr( p, param, type, data, data.size )
 		End Sub
+	#tag EndMethod
+
+	#tag Method, Flags = &h0
+		Function SendUsingPSN(Extends ae As AppleEvent, autoStart As Boolean = False) As Boolean
+		  // Send AppleEvent using PSN instead of Bundle ID
+		  
+		  Soft Declare Function AEGetAttributeDesc Lib "Carbon" (theAppleEvent As Integer, theAEKeyword As OSType, desiredType As OSType, ByRef result As AEDesc) As Short
+		  Soft Declare Function AEPutAttributeDesc Lib "Carbon" (theAppleEvent As Integer, theAEKeyword As OSType, ByRef result As AEDesc) As Short
+		  Soft Declare Function AEReplaceDescData Lib "Carbon" (typeCode As OSType, dataPtr As Ptr, dataSize As Integer, ByRef theAEDesc As AEDesc) As Short
+		  Soft Declare Function AEGetDescData Lib "Carbon" (ByRef theAEDesc As AEDesc, dataPtr As Ptr, maximumSize As Integer) As Short
+		  Soft Declare Function AEDisposeDesc Lib "Carbon" (ByRef theAEDesc As AEDesc) As Short
+		  
+		  Dim err As Short = 0
+		  Dim aed As AEDesc
+		  Dim mb As New MemoryBlock(256)
+		  Dim bundleId As String
+		  Dim psn As ProcessSerialNumber
+		  
+		  // Retrieve bundle ID set via the constructor
+		  err =  AEGetAttributeDesc(ae.Ptr, "addr", "bund", aed)
+		  If err <> 0 Then Return ae.Send()
+		  
+		  err = AEGetDescData(aed, mb, mb.Size)
+		  If err <> 0 Then Return False
+		  
+		  bundleId = mb.CString(0)
+		  err = AEDisposeDesc(aed)
+		  If err <> 0 Then Return False
+		  
+		  // bundle ID seems like an OSType
+		  If bundleId.Len() = 4 Then Return ae.Send()
+		  
+		  psn = LookupPSNFromBundleID(bundleId)
+		  
+		  If psn.highLongOfPSN = 0 And psn.lowLongOfPSN = 0 Then
+		    // App is not running...
+		    If autoStart Then
+		      // Launch the app from bundle ID
+		      Dim url As NSURL = NSWorkspace.URLForApplicationWithBundleIdentifier(bundleId)
+		      If url.Item = Nil Then Return False
+		      url.Item.Launch(False)
+		      
+		      // Look up again
+		      psn = LookupPSNFromBundleID(bundleId)
+		      If psn.highLongOfPSN = 0 And psn.lowLongOfPSN = 0 Then Return False
+		    Else
+		      Return False
+		    End If
+		  End If
+		  
+		  mb.CString(0) = psn.StringValue(True)
+		  
+		  err = AEReplaceDescData("psn ", mb, psn.Size, aed)
+		  If err <> 0 Then Return False
+		  
+		  err = AEPutAttributeDesc(ae.Ptr, "addr", aed)
+		  err = AEDisposeDesc(aed)
+		  If err <> 0 Then Return False
+		  
+		  Return ae.Send()
+		End Function
 	#tag EndMethod
 
 	#tag Method, Flags = &h0
