@@ -1,27 +1,6 @@
 #tag Class
 Protected Class Process
 	#tag Method, Flags = &h0
-		Function BundleIdentifier() As String
-		  #if TargetMacOS
-		    Soft Declare Function ProcessInformationCopyDictionary Lib CarbonLib (ByRef PSN As ProcessSerialNumber, infoToReturn As Integer) As Integer
-		    
-		    Dim cfDicRef As Integer = ProcessInformationCopyDictionary(psn, kProcessDictionaryIncludeAllInformationMask)
-		    Dim cfDic As CFDictionary = CFDictionary(CFType.FromHandle(cfDicRef))
-		    Dim key As New CFString("CFBundleIdentifier") // kCFBundleIdentifierKey
-		    Dim bundleId As String = ""
-		    
-		    If cfDic.HasKey(key) then
-		      bundleId = CFString(cfDic.Value(key))
-		    End if
-		    CoreFoundation.Release(Ptr(cfDicRef))
-		    
-		    Return bundleId
-		  #endif
-		  
-		End Function
-	#tag EndMethod
-
-	#tag Method, Flags = &h0
 		Function BundleLocation() As FolderItem
 		  //Retrieves the file system location of the application bundle (or executable file) associated with a process.
 		  
@@ -192,6 +171,23 @@ Protected Class Process
 	#tag ComputedProperty, Flags = &h0
 		#tag Getter
 			Get
+			  #if TargetMacOS
+			    if procInformation <> nil then
+			      return CFString(procInformation.Lookup(CFString(kCFBundleIdentifierKey), CFString(""))).stringValue
+			    end if
+			  #endif
+			End Get
+		#tag EndGetter
+		BundleID As String
+	#tag EndComputedProperty
+
+	#tag Property, Flags = &h21
+		Private mProcInformation As CFDictionary
+	#tag EndProperty
+
+	#tag ComputedProperty, Flags = &h0
+		#tag Getter
+			Get
 			  #if targetMacOS
 			    soft declare function CopyProcessName lib CarbonLib (ByRef thePSN as ProcessSerialNumber, ByRef name as CFStringRef) as Int32
 			    
@@ -227,6 +223,32 @@ Protected Class Process
 		PID As Integer
 	#tag EndComputedProperty
 
+	#tag ComputedProperty, Flags = &h21
+		#tag Getter
+			Get
+			  // get a dictionary with process information and store it for later use
+			  
+			  #if targetMacOS
+			    soft declare function ProcessInformationCopyDictionary lib CarbonLib (ByRef PSN as ProcessSerialNumber, infoToReturn as UInt32) as Ptr
+			    
+			    if mProcInformation is nil then
+			      
+			      dim p as Ptr = ProcessInformationCopyDictionary(psn, kProcessDictionaryIncludeAllInformationMask)
+			      
+			      if p <> nil then
+			        mProcInformation = new CFDictionary(p, CFType.hasOwnership)
+			      end if
+			      
+			    end if
+			    
+			    return mProcInformation
+			  #endif
+			  
+			End Get
+		#tag EndGetter
+		Private procInformation As CFDictionary
+	#tag EndComputedProperty
+
 	#tag Property, Flags = &h21
 		Private psn As ProcessSerialNumber
 	#tag EndProperty
@@ -259,6 +281,9 @@ Protected Class Process
 		Visible As Boolean
 	#tag EndComputedProperty
 
+
+	#tag Constant, Name = kCFBundleIdentifierKey, Type = String, Dynamic = False, Default = \"CFBundleIdentifier", Scope = Private
+	#tag EndConstant
 
 	#tag Constant, Name = kNoProcess, Type = Double, Dynamic = False, Default = \"0", Scope = Private
 	#tag EndConstant

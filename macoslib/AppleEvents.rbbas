@@ -5,7 +5,7 @@ Protected Module AppleEvents
 		  Dim list() As ProcessManager.Process
 		  list = ProcessManager.Process.ProcessList()
 		  For Each p As ProcessManager.Process In list
-		    If p.BundleIdentifier() = bundleId Then
+		    If p.BundleID() = bundleId Then
 		      Return p.SerialNumber()
 		    End If
 		  Next
